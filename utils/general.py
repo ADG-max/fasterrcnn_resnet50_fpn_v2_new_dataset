@@ -254,7 +254,8 @@ def save_validation_results(images, detections, counter, out_dir, classes, color
                     (int(box[0]), int(box[1]-5)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 
                     2, lineType=cv2.LINE_AA)
-        cv2.imwrite(f"{out_dir}/image_{i}_{counter}.jpg", image*255.)
+        image_to_save = np.clip(image * 255.0, 0, 255).astype(np.uint8)
+        cv2.imwrite(f"{out_dir}/image_{i}_{counter}.jpg", image_to_save)
         image_list.append(image[:, :, ::-1])
     return image_list
 
