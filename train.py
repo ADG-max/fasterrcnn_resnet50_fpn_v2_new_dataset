@@ -54,7 +54,7 @@ def parse_opt():
     )
     parser.add_argument(
         '-d', '--device', 
-        default=default='cuda' if torch.cuda.is_available() else 'cpu',
+        default='cuda' if torch.cuda.is_available() else 'cpu',
         help='computation/training device, default is GPU if GPU present'
     )
     parser.add_argument(
