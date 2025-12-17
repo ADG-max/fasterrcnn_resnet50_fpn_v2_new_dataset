@@ -203,10 +203,10 @@ def compute_precision_recall(
     iou_thr=0.5,
     score_thr=0.5
 ):
+    # skip background (0)
     tp = np.zeros(num_classes)
     fp = np.zeros(num_classes)
     fn = np.zeros(num_classes)
-
     for preds, gts in zip(all_preds, all_gts):
         gt_boxes = gts["boxes"]
         gt_labels = gts["labels"]
@@ -214,7 +214,6 @@ def compute_precision_recall(
         pred_boxes = preds["boxes"]
         pred_labels = preds["labels"]
         pred_scores = preds["scores"]
-        # filter by score
         keep = pred_scores >= score_thr
         pred_boxes = pred_boxes[keep]
         pred_labels = pred_labels[keep]
@@ -240,8 +239,8 @@ def compute_precision_recall(
                 fp[pl] += 1
 
         # FN: GT yang tidak terdeteksi
-        for idx, gt_label in enumerate(gt_labels):
-            if idx not in matched_gt:
+        for i, gt_label in enumerate(gt_labels):
+            if i not in matched_gt:
                 fn[gt_label] += 1
 
     precision = tp / (tp + fp + 1e-6)
@@ -255,8 +254,8 @@ def compute_confusion_matrix(
     iou_thr=0.5,
     score_thr=0.5
 ):
-    y_true = []
-    y_pred = []
+    bg = 0
+    cm = np.zeros((num_classes + 1, num_classes + 1), dtype=int)
     for preds, gts in zip(all_preds, all_gts):
         gt_boxes = gts["boxes"]
         gt_labels = gts["labels"]
@@ -271,18 +270,21 @@ def compute_confusion_matrix(
         matched_gt = set()
         for pb, pl in zip(pred_boxes, pred_labels):
             if len(gt_boxes) == 0:
+                cm[bg, pl] += 1
                 continue
 
             ious = box_iou(pb, gt_boxes)
             best_iou = ious.max()
             best_gt = ious.argmax()
             if best_iou >= iou_thr and best_gt not in matched_gt:
-                y_true.append(gt_labels[best_gt])
-                y_pred.append(pl)
+                gt_label = gt_labels[best_gt]
+                cm[gt_label, pl] += 1
                 matched_gt.add(best_gt)
+            else:
+                cm[bg, pl] += 1
 
-    return confusion_matrix(
-        y_true,
-        y_pred,
-        labels=list(range(num_classes))
-    )
+        for i, gt_label in enumerate(gt_labels):
+            if i not in matched_gt:
+                cm[gt_label, bg] += 1
+
+    return cm
