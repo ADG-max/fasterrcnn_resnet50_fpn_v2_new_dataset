@@ -12,7 +12,8 @@ python train.py --model fasterrcnn_resnet50_fpn --epochs 2 --use-train-aug --con
 """
 
 from torch_utils.engine import (
-    train_one_epoch, evaluate
+    train_one_epoch, evaluate,
+    compute_precision_recall, compute_confusion_matrix
 )
 from datasets import (
     create_train_dataset, create_valid_dataset, 
@@ -23,7 +24,8 @@ from utils.general import (
     set_training_dir, Averager, 
     save_model, save_loss_plot,
     show_tranformed_image,
-    save_mAP, save_model_state, SaveBestModel
+    save_mAP, save_model_state, SaveBestModel, 
+    save_precision_recall_plot, save_confusion_matrix
 )
 from utils.logging import (
     set_log, 
@@ -282,7 +284,12 @@ def main(args):
             classes=CLASSES,
             colors=COLORS
         )
-        precision, recall = compute_precision_recall(preds, gts, NUM_CLASSES)
+        precision, recall = compute_precision_recall(
+            preds, gts, NUM_CLASSES
+        )
+        cm = compute_confusion_matrix(
+            preds, gts, NUM_CLASSES
+        )
 
         # Append the current epoch's batch-wise losses to the `train_loss_list`.
         train_loss_list.extend(batch_loss_list)
@@ -347,6 +354,7 @@ def main(args):
             val_recall,
             CLASSES
         )
+        save_confusion_matrix(cm, CLASSES, OUT_DIR)
 
         # Save the current epoch model state. This can be used 
         # to resume training. It saves model state dict, number of
