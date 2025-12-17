@@ -4,6 +4,18 @@ from albumentations.pytorch import ToTensorV2
 from torchvision import transforms as transforms
 
 # Define the training tranforms
+def get_minority_aug():
+    return A.Compose([
+        A.MotionBlur(blur_limit=5, p=0.7),
+        A.RandomFog(p=0.4),
+        A.RandomGamma(p=0.4),
+        A.ColorJitter(p=0.7),
+        ToTensorV2(p=1.0),
+    ], bbox_params={
+        'format': 'pascal_voc',
+        'label_fields': ['labels']
+    })
+
 def get_train_aug():
     return A.Compose([
         A.MotionBlur(blur_limit=3, p=0.5),
