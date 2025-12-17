@@ -196,15 +196,9 @@ def box_iou(box1, box2):
     return inter / union
 
 def compute_precision_recall(
-    all_preds,
-    all_gts,
-    num_classes,
-    iou_thr=0.5,
-    score_thr=0.5
+    all_preds, all_gts, num_classes,
+    iou_thr=0.5, score_thr=0.5
 ):
-    """
-    Precision & Recall per class (skip background = 0)
-    """
     tp = np.zeros(num_classes)
     fp = np.zeros(num_classes)
     fn = np.zeros(num_classes)
@@ -220,8 +214,13 @@ def compute_precision_recall(
         keep = pred_scores >= score_thr
         pred_boxes = pred_boxes[keep]
         pred_labels = pred_labels[keep]
+        pred_scores = pred_scores[keep]
 
-        for c in range(1, num_classes):  # skip background
+        order = np.argsort(-pred_scores)
+        pred_boxes = pred_boxes[order]
+        pred_labels = pred_labels[order]
+
+        for c in range(1, num_classes):
             gt_mask = gt_labels == c
             pred_mask = pred_labels == c
 
