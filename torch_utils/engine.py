@@ -8,6 +8,7 @@ from torch_utils import utils
 from torch_utils.coco_eval import CocoEvaluator
 from torch_utils.coco_utils import get_coco_api_from_dataset
 from utils.general import save_validation_results
+from sklearn.metrics import confusion_matrix
 
 def train_one_epoch(
     model, 
@@ -128,6 +129,8 @@ def evaluate(
     iou_types = _get_iou_types(model)
     coco_evaluator = CocoEvaluator(coco, iou_types)
 
+    all_preds = []
+    all_gts = []
     counter = 0
     for images, targets in metric_logger.log_every(data_loader, 100, header):
         counter += 1
@@ -138,9 +141,19 @@ def evaluate(
         model_time = time.time()
         outputs = model(images)
 
+        for tgt, out in zip(targets, outputs):
+            all_gts.append({
+                "labels": tgt["labels"].cpu().numpy(),
+                "boxes": tgt["boxes"].cpu().numpy()
+            })
+            all_preds.append({
+                "labels": out["labels"].cpu().numpy(),
+                "boxes": out["boxes"].cpu().numpy(),
+                "scores": out["scores"].cpu().numpy()
+            })
         outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
         model_time = time.time() - model_time
-
+        
         res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
         evaluator_time = time.time()
         coco_evaluator.update(res)
@@ -164,4 +177,25 @@ def evaluate(
     coco_evaluator.accumulate()
     stats = coco_evaluator.summarize()
     torch.set_num_threads(n_threads)
-    return coco_evaluator, stats, val_saved_image
+    return coco_evaluator, stats, val_saved_image, all_preds, all_gts
+
+def compute_precision_recall(all_preds, all_gts, num_classes, iou_thr=0.5):
+    tp = np.zeros(num_classes)
+    fp = np.zeros(num_classes)
+    fn = np.zeros(num_classes)
+
+    # (pseudo) cocokkan box pakai IoU
+    # fokus class-level, bukan COCO style
+
+    precision = tp / (tp + fp + 1e-6)
+    recall = tp / (tp + fn + 1e-6)
+    return precision, recall
+
+def compute_confusion_matrix(all_preds, all_gts, num_classes):
+    y_true = []
+    y_pred = []
+
+    # isi y_true & y_pred dari matching box
+    return confusion_matrix(
+        y_true, y_pred, labels=list(range(num_classes))
+    )
