@@ -202,10 +202,13 @@ def compute_precision_recall(
     iou_thr=0.5,
     score_thr=0.5
 ):
-    # skip background (0)
+    """
+    Precision & Recall per class (skip background = 0)
+    """
     tp = np.zeros(num_classes)
     fp = np.zeros(num_classes)
     fn = np.zeros(num_classes)
+
     for preds, gts in zip(all_preds, all_gts):
         gt_boxes = gts["boxes"]
         gt_labels = gts["labels"]
@@ -213,34 +216,36 @@ def compute_precision_recall(
         pred_boxes = preds["boxes"]
         pred_labels = preds["labels"]
         pred_scores = preds["scores"]
+
         keep = pred_scores >= score_thr
         pred_boxes = pred_boxes[keep]
         pred_labels = pred_labels[keep]
 
-        matched_gt = set()
-        for pb, pl in zip(pred_boxes, pred_labels):
-            if len(gt_boxes) == 0:
-                fp[pl] += 1
-                continue
+        for c in range(1, num_classes):  # skip background
+            gt_mask = gt_labels == c
+            pred_mask = pred_labels == c
 
-            ious = box_iou(pb, gt_boxes)
-            best_iou = ious.max()
-            best_gt = ious.argmax()
-            if best_iou >= iou_thr and best_gt not in matched_gt:
-                gt_label = gt_labels[best_gt]
-                if pl == gt_label:
-                    tp[pl] += 1
+            gt_c_boxes = gt_boxes[gt_mask]
+            pred_c_boxes = pred_boxes[pred_mask]
+
+            matched_gt = set()
+
+            for pb in pred_c_boxes:
+                if len(gt_c_boxes) == 0:
+                    fp[c] += 1
+                    continue
+
+                ious = box_iou(pb, gt_c_boxes)
+                best_iou = ious.max()
+                best_gt = ious.argmax()
+
+                if best_iou >= iou_thr and best_gt not in matched_gt:
+                    tp[c] += 1
+                    matched_gt.add(best_gt)
                 else:
-                    fp[pl] += 1
-                    fn[gt_label] += 1
-                matched_gt.add(best_gt)
-            else:
-                fp[pl] += 1
+                    fp[c] += 1
 
-        # FN: GT yang tidak terdeteksi
-        for i, gt_label in enumerate(gt_labels):
-            if i not in matched_gt:
-                fn[gt_label] += 1
+            fn[c] += len(gt_c_boxes) - len(matched_gt)
 
     precision = tp / (tp + fp + 1e-6)
     recall = tp / (tp + fn + 1e-6)
