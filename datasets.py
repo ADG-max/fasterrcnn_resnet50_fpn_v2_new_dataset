@@ -6,7 +6,7 @@ import glob as glob
 import random
 
 from xml.etree import ElementTree as et
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from utils.general import visualize_mosaic_images
 from utils.transforms import (
     get_train_transform, get_valid_transform,
@@ -305,11 +305,45 @@ def create_valid_dataset(
     )
     return valid_dataset
 
+def get_image_level_labels(dataset):
+    """
+    Ambil 1 label dominan per image
+    (dibutuhkan untuk WeightedRandomSampler)
+    """
+    image_labels = []
+
+    for idx in range(len(dataset)):
+        _, target = dataset[idx]
+        labels = target["labels"].numpy()
+
+        # ambil label paling sering di image tsb
+        dominant_label = np.bincount(labels).argmax()
+        image_labels.append(dominant_label)
+
+    return np.array(image_labels)
+
 def create_train_loader(train_dataset, batch_size, num_workers=0):
+    # Ambil label dominan per image
+    image_labels = get_image_level_labels(train_dataset)
+
+    # Hitung distribusi kelas
+    class_counts = np.bincount(image_labels)
+    class_weights = 1.0 / class_counts
+
+    # Bobot per sample (image)
+    sample_weights = class_weights[image_labels]
+
+    sampler = WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(sample_weights),
+        replacement=True
+    )
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        sampler=sampler,        
+        shuffle=False,          
         num_workers=num_workers,
         collate_fn=collate_fn
     )
