@@ -9,7 +9,6 @@ from torch_utils import utils
 from torch_utils.coco_eval import CocoEvaluator
 from torch_utils.coco_utils import get_coco_api_from_dataset
 from utils.general import save_validation_results
-from sklearn.metrics import confusion_matrix
 
 def train_one_epoch(
     model, 
@@ -246,45 +245,3 @@ def compute_precision_recall(
     precision = tp / (tp + fp + 1e-6)
     recall = tp / (tp + fn + 1e-6)
     return precision, recall
-
-def compute_confusion_matrix(
-    all_preds,
-    all_gts,
-    num_classes,
-    iou_thr=0.5,
-    score_thr=0.5
-):
-    bg = 0
-    cm = np.zeros((num_classes + 1, num_classes + 1), dtype=int)
-    for preds, gts in zip(all_preds, all_gts):
-        gt_boxes = gts["boxes"]
-        gt_labels = gts["labels"]
-
-        pred_boxes = preds["boxes"]
-        pred_labels = preds["labels"]
-        pred_scores = preds["scores"]
-        keep = pred_scores >= score_thr
-        pred_boxes = pred_boxes[keep]
-        pred_labels = pred_labels[keep]
-
-        matched_gt = set()
-        for pb, pl in zip(pred_boxes, pred_labels):
-            if len(gt_boxes) == 0:
-                cm[bg, pl] += 1
-                continue
-
-            ious = box_iou(pb, gt_boxes)
-            best_iou = ious.max()
-            best_gt = ious.argmax()
-            if best_iou >= iou_thr and best_gt not in matched_gt:
-                gt_label = gt_labels[best_gt]
-                cm[gt_label, pl] += 1
-                matched_gt.add(best_gt)
-            else:
-                cm[bg, pl] += 1
-
-        for i, gt_label in enumerate(gt_labels):
-            if i not in matched_gt:
-                cm[gt_label, bg] += 1
-
-    return cm
