@@ -1,6 +1,8 @@
+import torch
 import torchvision
 
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from models.custom_roi_heads import WeightedRoIHeads
 
 def create_model(num_classes, pretrained=True, coco_model=False):
     # Load Faster RCNN pre-trained model
@@ -15,6 +17,28 @@ def create_model(num_classes, pretrained=True, coco_model=False):
     # define a new head for the detector with required number of classes
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes) 
 
+    class_weights = torch.tensor(
+        [1.0, 1.8, 2.2, 2.2],  # background + classes
+        dtype=torch.float32
+    )
+    class_weights = class_weights.to(
+        next(model.parameters()).device
+    )
+
+    model.roi_heads = WeightedRoIHeads(
+        model.roi_heads.box_roi_pool,
+        model.roi_heads.box_head,
+        model.roi_heads.box_predictor,
+        fg_iou_thresh=model.roi_heads.fg_iou_thresh,
+        bg_iou_thresh=model.roi_heads.bg_iou_thresh,
+        batch_size_per_image=model.roi_heads.batch_size_per_image,
+        positive_fraction=model.roi_heads.positive_fraction,
+        bbox_reg_weights=model.roi_heads.bbox_reg_weights,
+        score_thresh=model.roi_heads.score_thresh,
+        nms_thresh=model.roi_heads.nms_thresh,
+        detections_per_img=model.roi_heads.detections_per_img,
+        class_weights=class_weights
+    )
     return model
 
 if __name__ == '__main__':
