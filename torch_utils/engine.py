@@ -119,7 +119,6 @@ def evaluate(
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = "Test:"
-    val_saved_image = None
 
     coco = get_coco_api_from_dataset(data_loader.dataset)
     if 'info' not in coco.dataset:
@@ -130,8 +129,6 @@ def evaluate(
     iou_types = _get_iou_types(model)
     coco_evaluator = CocoEvaluator(coco, iou_types)
 
-    all_preds = []
-    all_gts = []
     counter = 0
     for images, targets in metric_logger.log_every(data_loader, 100, header):
         counter += 1
@@ -142,16 +139,6 @@ def evaluate(
         model_time = time.time()
         outputs = model(images)
 
-        for tgt, out in zip(targets, outputs):
-            all_gts.append({
-                "labels": tgt["labels"].cpu().numpy(),
-                "boxes": tgt["boxes"].cpu().numpy()
-            })
-            all_preds.append({
-                "labels": out["labels"].cpu().numpy(),
-                "boxes": out["boxes"].cpu().numpy(),
-                "scores": out["scores"].cpu().numpy()
-            })
         outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
         model_time = time.time() - model_time
         
@@ -178,104 +165,5 @@ def evaluate(
     coco_evaluator.accumulate()
     stats = coco_evaluator.summarize()
     torch.set_num_threads(n_threads)
-    return coco_evaluator, stats, val_saved_image, all_preds, all_gts
-
-def box_iou(box1, box2):
-    """
-    box1: [4], box2: [N, 4]
-    """
-    x1 = np.maximum(box1[0], box2[:, 0])
-    y1 = np.maximum(box1[1], box2[:, 1])
-    x2 = np.minimum(box1[2], box2[:, 2])
-    y2 = np.minimum(box1[3], box2[:, 3])
-
-    inter = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
-    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
-    area2 = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
-    union = area1 + area2 - inter + 1e-6
-    return inter / union
-
-def compute_precision_recall(
-    all_preds,
-    all_gts,
-    num_classes,
-    iou_thr=0.5,
-    score_thr=0.5
-):
-    precision = np.zeros(num_classes)
-    recall = np.zeros(num_classes)
-
-    for cls in range(1, num_classes):
-        tp = 0
-        fp = 0
-        fn = 0
-
-        for preds, gts in zip(all_preds, all_gts):
-            # === Filter GT & Pred ===
-            gt_mask = gts["labels"] == cls
-            gt_boxes = gts["boxes"][gt_mask]
-            gt_used = np.zeros(len(gt_boxes), dtype=bool)
-
-            pred_mask = (preds["labels"] == cls) & (preds["scores"] >= score_thr)
-            pred_boxes = preds["boxes"][pred_mask]
-
-            # === Match predictions ===
-            for pb in pred_boxes:
-                if len(gt_boxes) == 0:
-                    fp += 1
-                    continue
-
-                ious = box_iou(pb, gt_boxes)
-                best = np.argmax(ious)
-
-                if ious[best] >= iou_thr and not gt_used[best]:
-                    tp += 1
-                    gt_used[best] = True
-                else:
-                    fp += 1
-
-            fn += np.sum(~gt_used)
-
-        precision[cls] = tp / (tp + fp + 1e-6)
-        recall[cls] = tp / (tp + fn + 1e-6)
-
-    precision[0] = np.nan
-    recall[0] = np.nan
-    return precision, recall
-
-def fire_other_confusion(
-    all_preds,
-    all_gts,
-    iou_thr=0.5,
-    score_thr=0.5
-):
-    fire_as_other = 0
-    other_as_fire = 0
-
-    for preds, gts in zip(all_preds, all_gts):
-        gt_used = np.zeros(len(gts["boxes"]), dtype=bool)
-
-        for pb, pl, ps in zip(
-            preds["boxes"], preds["labels"], preds["scores"]
-        ):
-            if ps < score_thr:
-                continue
-
-            if len(gts["boxes"]) == 0:
-                continue
-
-            ious = box_iou(pb, gts["boxes"])
-            best = np.argmax(ious)
-
-            if ious[best] < iou_thr or gt_used[best]:
-                continue
-
-            gt = gts["labels"][best]
-            gt_used[best] = True
-
-            if pl == 1 and gt == 3:
-                other_as_fire += 1
-            elif pl == 3 and gt == 1:
-                fire_as_other += 1
-
-    return fire_as_other, other_as_fire
+    return coco_evaluator, stats, val_saved_image
+    
