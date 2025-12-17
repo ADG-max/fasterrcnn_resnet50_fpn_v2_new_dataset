@@ -138,6 +138,35 @@ def save_mAP(OUT_DIR, map_05, map):
     figure.savefig(f"{OUT_DIR}/map.png")
     # plt.close('all')
 
+def save_precision_recall_plot(
+    OUT_DIR, precision_hist, recall_hist, classes
+):
+    precision_hist = np.array(precision_hist)
+    recall_hist = np.array(recall_hist)
+
+    for c in range(1, len(classes)):  # skip background
+        plt.figure(figsize=(8, 5))
+        plt.plot(precision_hist[:, c], label='Precision')
+        plt.plot(recall_hist[:, c], label='Recall')
+        plt.xlabel("Epoch")
+        plt.ylabel("Value")
+        plt.title(classes[c])
+        plt.legend()
+        plt.savefig(f"{OUT_DIR}/pr_{classes[c]}.png")
+        plt.close()
+
+def save_confusion_matrix(cm, classes, out_dir):
+    plt.figure(figsize=(8, 6))
+    plt.imshow(cm, cmap='Blues')
+    plt.colorbar()
+    plt.xticks(range(len(classes)), classes, rotation=45)
+    plt.yticks(range(len(classes)), classes)
+    plt.xlabel("Predicted")
+    plt.ylabel("GT")
+    plt.tight_layout()
+    plt.savefig(f"{out_dir}/confusion_matrix.png")
+    plt.close()
+
 def visualize_mosaic_images(boxes, labels, image_resized, classes):
     print(boxes)
     print(labels)
