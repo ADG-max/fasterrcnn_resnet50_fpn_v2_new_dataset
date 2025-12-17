@@ -1,6 +1,7 @@
 import math
 import sys
 import time
+import numpy as np
 
 import torch
 import torchvision.models.detection.mask_rcnn
@@ -119,6 +120,7 @@ def evaluate(
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = "Test:"
+    val_saved_image = None
 
     coco = get_coco_api_from_dataset(data_loader.dataset)
     if 'info' not in coco.dataset:
@@ -179,23 +181,108 @@ def evaluate(
     torch.set_num_threads(n_threads)
     return coco_evaluator, stats, val_saved_image, all_preds, all_gts
 
-def compute_precision_recall(all_preds, all_gts, num_classes, iou_thr=0.5):
+def box_iou(box1, box2):
+    """
+    box1: [4], box2: [N, 4]
+    """
+    x1 = np.maximum(box1[0], box2[:, 0])
+    y1 = np.maximum(box1[1], box2[:, 1])
+    x2 = np.minimum(box1[2], box2[:, 2])
+    y2 = np.minimum(box1[3], box2[:, 3])
+
+    inter = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area2 = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
+    union = area1 + area2 - inter + 1e-6
+    return inter / union
+
+def compute_precision_recall(
+    all_preds,
+    all_gts,
+    num_classes,
+    iou_thr=0.5,
+    score_thr=0.5
+):
     tp = np.zeros(num_classes)
     fp = np.zeros(num_classes)
     fn = np.zeros(num_classes)
 
-    # (pseudo) cocokkan box pakai IoU
-    # fokus class-level, bukan COCO style
+    for preds, gts in zip(all_preds, all_gts):
+        gt_boxes = gts["boxes"]
+        gt_labels = gts["labels"]
+
+        pred_boxes = preds["boxes"]
+        pred_labels = preds["labels"]
+        pred_scores = preds["scores"]
+        # filter by score
+        keep = pred_scores >= score_thr
+        pred_boxes = pred_boxes[keep]
+        pred_labels = pred_labels[keep]
+
+        matched_gt = set()
+        for pb, pl in zip(pred_boxes, pred_labels):
+            if len(gt_boxes) == 0:
+                fp[pl] += 1
+                continue
+
+            ious = box_iou(pb, gt_boxes)
+            best_iou = ious.max()
+            best_gt = ious.argmax()
+            if best_iou >= iou_thr and best_gt not in matched_gt:
+                gt_label = gt_labels[best_gt]
+                if pl == gt_label:
+                    tp[pl] += 1
+                else:
+                    fp[pl] += 1
+                    fn[gt_label] += 1
+                matched_gt.add(best_gt)
+            else:
+                fp[pl] += 1
+
+        # FN: GT yang tidak terdeteksi
+        for idx, gt_label in enumerate(gt_labels):
+            if idx not in matched_gt:
+                fn[gt_label] += 1
 
     precision = tp / (tp + fp + 1e-6)
     recall = tp / (tp + fn + 1e-6)
     return precision, recall
 
-def compute_confusion_matrix(all_preds, all_gts, num_classes):
+def compute_confusion_matrix(
+    all_preds,
+    all_gts,
+    num_classes,
+    iou_thr=0.5,
+    score_thr=0.5
+):
     y_true = []
     y_pred = []
+    for preds, gts in zip(all_preds, all_gts):
+        gt_boxes = gts["boxes"]
+        gt_labels = gts["labels"]
 
-    # isi y_true & y_pred dari matching box
+        pred_boxes = preds["boxes"]
+        pred_labels = preds["labels"]
+        pred_scores = preds["scores"]
+        keep = pred_scores >= score_thr
+        pred_boxes = pred_boxes[keep]
+        pred_labels = pred_labels[keep]
+
+        matched_gt = set()
+        for pb, pl in zip(pred_boxes, pred_labels):
+            if len(gt_boxes) == 0:
+                continue
+
+            ious = box_iou(pb, gt_boxes)
+            best_iou = ious.max()
+            best_gt = ious.argmax()
+            if best_iou >= iou_thr and best_gt not in matched_gt:
+                y_true.append(gt_labels[best_gt])
+                y_pred.append(pl)
+                matched_gt.add(best_gt)
+
     return confusion_matrix(
-        y_true, y_pred, labels=list(range(num_classes))
+        y_true,
+        y_pred,
+        labels=list(range(num_classes))
     )
