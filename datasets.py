@@ -54,7 +54,6 @@ class CustomDataset(Dataset):
         
     def _build_image_level_labels(self):
         image_labels = []
-
         for image_name in self.all_images:
             xml_path = os.path.join(
                 self.labels_path, image_name.replace('.jpg', '.xml')
@@ -295,10 +294,8 @@ class CustomDataset(Dataset):
             bboxes=target["boxes"].numpy(),
             labels=labels
         )
-    
         image_resized = sample["image"]
         target["boxes"] = torch.as_tensor(sample["bboxes"], dtype=torch.float32)
-            
         return image_resized, target
 
     def __len__(self):
@@ -358,7 +355,6 @@ def create_train_loader(train_dataset, batch_size, num_workers=0):
         num_samples=len(sample_weights),
         replacement=True
     )
-
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
