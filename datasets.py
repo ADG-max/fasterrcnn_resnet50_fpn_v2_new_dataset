@@ -10,9 +10,18 @@ from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from utils.general import visualize_mosaic_images
 from utils.transforms import (
     get_train_transform, get_valid_transform,
-    get_train_aug
+    get_train_aug, get_minority_aug
 )
 
+CLASS_TO_IDX = {
+    "fire": 1,
+    "smoke": 2,
+    "other": 3
+}
+MINORITY_CLASSES = [
+    CLASS_TO_IDX["smoke"],
+    CLASS_TO_IDX["other"]
+]
 # the dataset class
 class CustomDataset(Dataset):
     def __init__(
@@ -41,6 +50,26 @@ class CustomDataset(Dataset):
         self.all_images = sorted(self.all_images)
         # Remove all annotations and images when no object is present.
         self.read_and_clean()
+        self.image_level_labels = self._build_image_level_labels()
+        
+    def _build_image_level_labels(self):
+        image_labels = []
+
+        for image_name in self.all_images:
+            xml_path = os.path.join(
+                self.labels_path, image_name.replace('.jpg', '.xml')
+            )
+            tree = et.parse(xml_path)
+            root = tree.getroot()
+
+            labels = [
+                self.classes.index(obj.find('name').text)
+                for obj in root.findall('object')
+            ]
+            dominant = np.bincount(labels).argmax()
+            image_labels.append(dominant)
+
+        return np.array(image_labels)
         
     def read_and_clean(self):
         # Discard any images and labels when the XML 
@@ -251,20 +280,24 @@ class CustomDataset(Dataset):
         target["iscrowd"] = iscrowd
         image_id = torch.tensor([idx])
         target["image_id"] = image_id
-        if self.use_train_aug: # Use train augmentation if argument is passed.
-            train_aug = get_train_aug()
-            sample = train_aug(image=image_resized,
-                                     bboxes=target['boxes'],
-                                     labels=labels)
-            image_resized = sample['image']
-            target['boxes'] = torch.Tensor(sample['bboxes'])
+        if self.train:
+            if any(l.item() in MINORITY_CLASSES for l in labels):
+                aug = get_minority_aug()
+            elif self.use_train_aug: # Use train augmentation if argument is passed.
+                aug = get_train_aug()
+            else:
+                aug = self.transforms
         else:
-            sample = self.transforms(image=image_resized,
-                                     bboxes=target['boxes'],
-                                     labels=labels)
-            image_resized = sample['image']
-            target['boxes'] = torch.Tensor(sample['bboxes'])
-        
+            aug = self.transforms
+    
+        sample = aug(
+            image=image_resized,
+            bboxes=target["boxes"].numpy(),
+            labels=labels
+        )
+    
+        image_resized = sample["image"]
+        target["boxes"] = torch.as_tensor(sample["bboxes"], dtype=torch.float32)
             
         return image_resized, target
 
@@ -306,21 +339,7 @@ def create_valid_dataset(
     return valid_dataset
 
 def get_image_level_labels(dataset):
-    """
-    Ambil 1 label dominan per image
-    (dibutuhkan untuk WeightedRandomSampler)
-    """
-    image_labels = []
-
-    for idx in range(len(dataset)):
-        _, target = dataset[idx]
-        labels = target["labels"].numpy()
-
-        # ambil label paling sering di image tsb
-        dominant_label = np.bincount(labels).argmax()
-        image_labels.append(dominant_label)
-
-    return np.array(image_labels)
+    return dataset.image_level_labels
 
 def create_train_loader(train_dataset, batch_size, num_workers=0):
     # Ambil label dominan per image
@@ -328,6 +347,7 @@ def create_train_loader(train_dataset, batch_size, num_workers=0):
 
     # Hitung distribusi kelas
     class_counts = np.bincount(image_labels)
+    class_counts[class_counts == 0] = 1  # hindari division by zero
     class_weights = 1.0 / class_counts
 
     # Bobot per sample (image)
