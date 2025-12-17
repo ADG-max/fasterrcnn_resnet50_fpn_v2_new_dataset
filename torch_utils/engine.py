@@ -211,41 +211,50 @@ def compute_precision_recall(
         pred_labels = preds["labels"]
         pred_scores = preds["scores"]
 
+        # score threshold
         keep = pred_scores >= score_thr
         pred_boxes = pred_boxes[keep]
         pred_labels = pred_labels[keep]
         pred_scores = pred_scores[keep]
 
+        # sort by confidence (important!)
         order = np.argsort(-pred_scores)
         pred_boxes = pred_boxes[order]
         pred_labels = pred_labels[order]
 
-        for c in range(1, num_classes):
-            gt_mask = gt_labels == c
-            pred_mask = pred_labels == c
+        for c in range(1, num_classes):  # skip background
+            gt_idx = np.where(gt_labels == c)[0]
+            pred_idx = np.where(pred_labels == c)[0]
 
-            gt_c_boxes = gt_boxes[gt_mask]
-            pred_c_boxes = pred_boxes[pred_mask]
+            gt_c_boxes = gt_boxes[gt_idx]
+            pred_c_boxes = pred_boxes[pred_idx]
 
-            matched_gt = set()
+            matched_gt = np.zeros(len(gt_c_boxes), dtype=bool)
 
+            # match preds → GT
             for pb in pred_c_boxes:
                 if len(gt_c_boxes) == 0:
                     fp[c] += 1
                     continue
 
                 ious = box_iou(pb, gt_c_boxes)
-                best_iou = ious.max()
                 best_gt = ious.argmax()
+                best_iou = ious[best_gt]
 
-                if best_iou >= iou_thr and best_gt not in matched_gt:
+                if best_iou >= iou_thr and not matched_gt[best_gt]:
                     tp[c] += 1
-                    matched_gt.add(best_gt)
+                    matched_gt[best_gt] = True
                 else:
                     fp[c] += 1
 
-            fn[c] += len(gt_c_boxes) - len(matched_gt)
+            # FN = GT yang tidak ter-match
+            fn[c] += (~matched_gt).sum()
 
     precision = tp / (tp + fp + 1e-6)
     recall = tp / (tp + fn + 1e-6)
+
+    precision[0] = np.nan  # background meaningless
+    recall[0] = np.nan
+
     return precision, recall
+
