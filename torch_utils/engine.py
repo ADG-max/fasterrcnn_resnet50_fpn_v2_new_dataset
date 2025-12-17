@@ -196,65 +196,86 @@ def box_iou(box1, box2):
     return inter / union
 
 def compute_precision_recall(
-    all_preds, all_gts, num_classes,
-    iou_thr=0.5, score_thr=0.5
+    all_preds,
+    all_gts,
+    num_classes,
+    iou_thr=0.5,
+    score_thr=0.5
 ):
-    tp = np.zeros(num_classes)
-    fp = np.zeros(num_classes)
-    fn = np.zeros(num_classes)
+    precision = np.zeros(num_classes)
+    recall = np.zeros(num_classes)
 
-    for preds, gts in zip(all_preds, all_gts):
-        gt_boxes = gts["boxes"]
-        gt_labels = gts["labels"]
+    for cls in range(1, num_classes):
+        tp = 0
+        fp = 0
+        fn = 0
 
-        pred_boxes = preds["boxes"]
-        pred_labels = preds["labels"]
-        pred_scores = preds["scores"]
+        for preds, gts in zip(all_preds, all_gts):
+            # === Filter GT & Pred ===
+            gt_mask = gts["labels"] == cls
+            gt_boxes = gts["boxes"][gt_mask]
+            gt_used = np.zeros(len(gt_boxes), dtype=bool)
 
-        # score threshold
-        keep = pred_scores >= score_thr
-        pred_boxes = pred_boxes[keep]
-        pred_labels = pred_labels[keep]
-        pred_scores = pred_scores[keep]
+            pred_mask = (preds["labels"] == cls) & (preds["scores"] >= score_thr)
+            pred_boxes = preds["boxes"][pred_mask]
 
-        # sort by confidence (important!)
-        order = np.argsort(-pred_scores)
-        pred_boxes = pred_boxes[order]
-        pred_labels = pred_labels[order]
-
-        for c in range(1, num_classes):  # skip background
-            gt_idx = np.where(gt_labels == c)[0]
-            pred_idx = np.where(pred_labels == c)[0]
-
-            gt_c_boxes = gt_boxes[gt_idx]
-            pred_c_boxes = pred_boxes[pred_idx]
-
-            matched_gt = np.zeros(len(gt_c_boxes), dtype=bool)
-
-            # match preds → GT
-            for pb in pred_c_boxes:
-                if len(gt_c_boxes) == 0:
-                    fp[c] += 1
+            # === Match predictions ===
+            for pb in pred_boxes:
+                if len(gt_boxes) == 0:
+                    fp += 1
                     continue
 
-                ious = box_iou(pb, gt_c_boxes)
-                best_gt = ious.argmax()
-                best_iou = ious[best_gt]
+                ious = box_iou(pb, gt_boxes)
+                best = np.argmax(ious)
 
-                if best_iou >= iou_thr and not matched_gt[best_gt]:
-                    tp[c] += 1
-                    matched_gt[best_gt] = True
+                if ious[best] >= iou_thr and not gt_used[best]:
+                    tp += 1
+                    gt_used[best] = True
                 else:
-                    fp[c] += 1
+                    fp += 1
 
-            # FN = GT yang tidak ter-match
-            fn[c] += (~matched_gt).sum()
+            fn += np.sum(~gt_used)
 
-    precision = tp / (tp + fp + 1e-6)
-    recall = tp / (tp + fn + 1e-6)
+        precision[cls] = tp / (tp + fp + 1e-6)
+        recall[cls] = tp / (tp + fn + 1e-6)
 
-    precision[0] = np.nan  # background meaningless
+    precision[0] = np.nan
     recall[0] = np.nan
-
     return precision, recall
 
+def fire_other_confusion(
+    all_preds,
+    all_gts,
+    iou_thr=0.5,
+    score_thr=0.5
+):
+    fire_as_other = 0
+    other_as_fire = 0
+
+    for preds, gts in zip(all_preds, all_gts):
+        gt_used = np.zeros(len(gts["boxes"]), dtype=bool)
+
+        for pb, pl, ps in zip(
+            preds["boxes"], preds["labels"], preds["scores"]
+        ):
+            if ps < score_thr:
+                continue
+
+            if len(gts["boxes"]) == 0:
+                continue
+
+            ious = box_iou(pb, gts["boxes"])
+            best = np.argmax(ious)
+
+            if ious[best] < iou_thr or gt_used[best]:
+                continue
+
+            gt = gts["labels"][best]
+            gt_used[best] = True
+
+            if pl == 1 and gt == 3:
+                other_as_fire += 1
+            elif pl == 3 and gt == 1:
+                fire_as_other += 1
+
+    return fire_as_other, other_as_fire
