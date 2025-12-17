@@ -155,18 +155,6 @@ def save_precision_recall_plot(
         plt.savefig(f"{OUT_DIR}/pr_{classes[c]}.png")
         plt.close()
 
-def save_confusion_matrix(cm, classes, out_dir):
-    plt.figure(figsize=(8, 6))
-    plt.imshow(cm, cmap='Blues')
-    plt.colorbar()
-    plt.xticks(range(len(classes)), classes, rotation=45)
-    plt.yticks(range(len(classes)), classes)
-    plt.xlabel("Predicted")
-    plt.ylabel("GT")
-    plt.tight_layout()
-    plt.savefig(f"{out_dir}/confusion_matrix.png")
-    plt.close()
-
 def visualize_mosaic_images(boxes, labels, image_resized, classes):
     print(boxes)
     print(labels)
