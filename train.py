@@ -276,7 +276,7 @@ def main(args):
             # IMPORTANT: recreate optimizer!
             params = [p for p in model.parameters() if p.requires_grad]
             optimizer = torch.optim.AdamW(
-                params, lr=1e-4, weight_decay=5e-4
+                params, lr=1e-5, weight_decay=5e-4
             )
     
             if args['cosine_annealing']:
