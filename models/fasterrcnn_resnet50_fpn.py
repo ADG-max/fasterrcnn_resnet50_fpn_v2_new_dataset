@@ -26,17 +26,21 @@ def create_model(num_classes, pretrained=True, coco_model=False):
     )
 
     model.roi_heads = WeightedRoIHeads(
-        model.roi_heads.box_roi_pool,
-        model.roi_heads.box_head,
-        model.roi_heads.box_predictor,
-        fg_iou_thresh=model.roi_heads.fg_iou_thresh,
-        bg_iou_thresh=model.roi_heads.bg_iou_thresh,
-        batch_size_per_image=model.roi_heads.batch_size_per_image,
-        positive_fraction=model.roi_heads.positive_fraction,
-        bbox_reg_weights=model.roi_heads.bbox_reg_weights,
-        score_thresh=model.roi_heads.score_thresh,
-        nms_thresh=model.roi_heads.nms_thresh,
-        detections_per_img=model.roi_heads.detections_per_img,
+        box_roi_pool=model.roi_heads.box_roi_pool,
+        box_head=model.roi_heads.box_head,
+        box_predictor=model.roi_heads.box_predictor,
+    
+        # === DEFINE MANUALLY (TorchVision >= 0.15) ===
+        fg_iou_thresh=0.5,
+        bg_iou_thresh=0.5,
+        batch_size_per_image=512,
+        positive_fraction=0.25,
+        bbox_reg_weights=None,
+    
+        score_thresh=0.05,
+        nms_thresh=0.5,
+        detections_per_img=100,
+    
         class_weights=class_weights
     )
     return model
