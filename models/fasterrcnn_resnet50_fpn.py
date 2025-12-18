@@ -18,7 +18,7 @@ def create_model(num_classes, pretrained=True, coco_model=False):
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes) 
 
     class_weights = torch.tensor(
-        [1.0, 1.8, 2.2, 2.2],  # background + classes
+        [1.0, 1.5, 2.5, 3.0],  # background + classes
         dtype=torch.float32
     )
     class_weights = class_weights.to(
