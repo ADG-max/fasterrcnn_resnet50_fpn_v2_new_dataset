@@ -40,6 +40,13 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 # For same annotation colors each time.
 np.random.seed(42)
+# Backbone freeze helper
+def freeze_backbone(model):
+    for name, parameter in model.backbone.body.named_parameters():
+        if name.startswith(("conv1", "bn1", "layer1")):
+            parameter.requires_grad = False
+
+FREEZE_EPOCHS = 5
 
 def parse_opt():
     # Construct the argument parser.
@@ -222,6 +229,10 @@ def main(args):
         
     print(model)
     model = model.to(DEVICE)
+    # Freeze backbone at start
+    if start_epochs < FREEZE_EPOCHS:
+        print(f"Freezing backbone for first {FREEZE_EPOCHS} epochs")
+        freeze_backbone(model)
     # Total parameters and trainable parameters.
     total_params = sum(p.numel() for p in model.parameters())
     print(f"{total_params:,} total parameters.")
@@ -232,7 +243,7 @@ def main(args):
     params = [p for p in model.parameters() if p.requires_grad]
     # Define the optimizer.
     # optimizer = torch.optim.SGD(params, lr=0.001, momentum=0.9, nesterov=True)
-    optimizer = torch.optim.AdamW(params, lr=0.0001, weight_decay=0.0005)
+    optimizer = torch.optim.AdamW(params, lr=1e-4, weight_decay=5e-4)
     if args['resume_training']: 
         # LOAD THE OPTIMIZER STATE DICTIONARY FROM THE CHECKPOINT.
         print('Loading optimizer state dictionary...')
@@ -241,12 +252,9 @@ def main(args):
     if args['cosine_annealing']:
         # LR will be zero as we approach `steps` number of epochs each time.
         # If `steps = 5`, LR will slowly reduce to zero every 5 epochs.
-        steps = NUM_EPOCHS + 10
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer, 
-            T_0=steps,
-            T_mult=1,
-            verbose=False
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=NUM_EPOCHS
         )
     else:
         scheduler = None
@@ -254,6 +262,23 @@ def main(args):
     save_best_model = SaveBestModel()
 
     for epoch in range(start_epochs, NUM_EPOCHS):
+        # Unfreeze backbone after FREEZE_EPOCHS
+        if epoch == FREEZE_EPOCHS:
+            print("Unfreezing backbone...")
+            for p in model.backbone.parameters():
+                p.requires_grad = True
+    
+            # IMPORTANT: recreate optimizer!
+            params = [p for p in model.parameters() if p.requires_grad]
+            optimizer = torch.optim.AdamW(
+                params, lr=1e-4, weight_decay=5e-4
+            )
+    
+            if args['cosine_annealing']:
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer,
+                    T_max=NUM_EPOCHS - epoch
+                )
         train_loss_hist.reset()
 
         _, batch_loss_list, \
@@ -271,7 +296,7 @@ def main(args):
             scheduler=scheduler
         )
 
-        coco_evaluator, stats, val_pred_image, preds, gts = evaluate(
+        coco_evaluator, stats, val_pred_image = evaluate(
             model, 
             valid_loader, 
             device=DEVICE,
