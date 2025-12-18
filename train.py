@@ -261,12 +261,13 @@ def main(args):
 
     save_best_model = SaveBestModel()
 
-    scaler = torch.cuda.amp.GradScaler(
+    scaler = torch.amp.GradScaler(
+        device_type="cuda",
         enabled=(DEVICE.type == "cuda")
     )
-    if epoch == 0:
-        print("AMP enabled:", scaler.is_enabled())
     for epoch in range(start_epochs, NUM_EPOCHS):
+        if epoch == 0:
+            print("AMP enabled:", scaler.is_enabled())
         # Unfreeze backbone after FREEZE_EPOCHS
         if epoch == FREEZE_EPOCHS:
             print("Unfreezing backbone...")
