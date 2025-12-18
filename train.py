@@ -261,8 +261,7 @@ def main(args):
 
     save_best_model = SaveBestModel()
 
-    scaler = torch.amp.GradScaler(
-        device_type="cuda",
+    scaler = torch.cuda.amp.GradScaler(
         enabled=(DEVICE.type == "cuda")
     )
     for epoch in range(start_epochs, NUM_EPOCHS):
