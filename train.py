@@ -270,14 +270,15 @@ def main(args):
         # Unfreeze backbone after FREEZE_EPOCHS
         if epoch == FREEZE_EPOCHS:
             print("Unfreezing backbone...")
-            for p in model.backbone.parameters():
-                p.requires_grad = True
+            for name, p in model.backbone.body.named_parameters():
+                if "layer4" in name:
+                    p.requires_grad = True
+                else:
+                    p.requires_grad = False
     
             # IMPORTANT: recreate optimizer!
             params = [p for p in model.parameters() if p.requires_grad]
-            optimizer = torch.optim.AdamW(
-                params, lr=1e-5, weight_decay=5e-4
-            )
+            optimizer = torch.optim.AdamW(params, lr=1e-5, weight_decay=5e-4)
     
             if args['cosine_annealing']:
                 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
