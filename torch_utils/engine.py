@@ -17,8 +17,7 @@ def train_one_epoch(
     epoch, 
     train_loss_hist,
     print_freq, 
-    scaler=None,
-    scheduler=None
+    scaler=None
 ):
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -82,9 +81,6 @@ def train_one_epoch(
         batch_loss_objectness_list.append(loss_dict_reduced['loss_objectness'].detach().cpu())
         batch_loss_rpn_list.append(loss_dict_reduced['loss_rpn_box_reg'].detach().cpu())
         train_loss_hist.send(loss_value)
-
-        if scheduler is not None:
-            scheduler.step(epoch + (step_counter/len(data_loader)))
 
     return metric_logger, batch_loss_list, batch_loss_cls_list, batch_loss_box_reg_list, batch_loss_objectness_list, batch_loss_rpn_list
 
