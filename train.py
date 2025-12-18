@@ -292,10 +292,8 @@ def main(args):
             DEVICE, 
             epoch, 
             train_loss_hist,
-            print_freq=100,
-            scheduler=scheduler
+            print_freq=100
         )
-
         coco_evaluator, stats, val_pred_image = evaluate(
             model, 
             valid_loader, 
@@ -305,7 +303,8 @@ def main(args):
             classes=CLASSES,
             colors=COLORS
         )
-
+        if scheduler is not None:
+            scheduler.step()
         # Append the current epoch's batch-wise losses to the `train_loss_list`.
         train_loss_list.extend(batch_loss_list)
         loss_cls_list.extend(batch_loss_cls_list)
