@@ -261,6 +261,11 @@ def main(args):
 
     save_best_model = SaveBestModel()
 
+    scaler = torch.cuda.amp.GradScaler(
+        enabled=(DEVICE.type == "cuda")
+    )
+    if epoch == 0:
+        print("AMP enabled:", scaler.is_enabled())
     for epoch in range(start_epochs, NUM_EPOCHS):
         # Unfreeze backbone after FREEZE_EPOCHS
         if epoch == FREEZE_EPOCHS:
@@ -292,7 +297,8 @@ def main(args):
             DEVICE, 
             epoch, 
             train_loss_hist,
-            print_freq=100
+            print_freq=100,
+            scaler=scaler
         )
         coco_evaluator, stats, val_pred_image = evaluate(
             model, 
