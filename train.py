@@ -46,7 +46,7 @@ def freeze_backbone(model):
         if name.startswith(("conv1", "bn1", "layer1")):
             parameter.requires_grad = False
 
-FREEZE_EPOCHS = 0
+FREEZE_EPOCHS = 5
 
 def parse_opt():
     # Construct the argument parser.
